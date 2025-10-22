@@ -1,3 +1,10 @@
+## ✅ Todo List
+
+- [x] 将scribble取样为point. pre_scribbles.py  
+- [x] 编写利用point prompt来训练SAM模型的脚本,只微调mask decoder。train_one_gpu.py  
+- [ ] 设置验证集，并修改train_one_gpu.py  
+- [ ] 编写测试脚本
+
 # MedSAM
 This is the official repository for MedSAM: Segment Anything in Medical Images.
 

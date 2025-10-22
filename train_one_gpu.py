@@ -24,6 +24,8 @@ from datetime import datetime
 import shutil
 import glob
 
+# ACDC 1841 slices
+
 # set seeds
 torch.manual_seed(2023)
 torch.cuda.empty_cache()
@@ -92,6 +94,7 @@ class NpyDataset(Dataset):
             "img gt name error" + self.gt_path_files[index] + self.npy_files[index]
         )
         label_ids = np.unique(gt)[1:]
+        # 对于每张图片，只随机取一个label的mask来训练，所以每次的分割任务都是二分类。
         gt2D = np.uint8(
             gt == random.choice(label_ids.tolist())
         )  # only one label, (256, 256)
@@ -115,11 +118,12 @@ class NpyDataset(Dataset):
 
 
 # %% sanity test of dataset class
-tr_dataset = NpyDataset("data/npy/CT_Abd")
+tr_dataset = NpyDataset("data/npy/MR_ACDCtr")
 tr_dataloader = DataLoader(tr_dataset, batch_size=8, shuffle=True)
 for step, (image, gt, bboxes, names_temp) in enumerate(tr_dataloader):
     print(image.shape, gt.shape, bboxes.shape)
     # show the example
+    # 1行2列，25英寸。返回fig(Figure实例，整个画布对象)和axs(Axes实例，子图对象，axs[0] 和 axs[1] 访问左右子图)
     _, axs = plt.subplots(1, 2, figsize=(25, 25))
     idx = random.randint(0, 7)
     axs[0].imshow(image[idx].cpu().permute(1, 2, 0).numpy())
@@ -147,7 +151,7 @@ parser.add_argument(
     "-i",
     "--tr_npy_path",
     type=str,
-    default="data/npy/CT_Abd",
+    default="data/npy/MR_ACDCtr",
     help="path to training npy files; two subfolders: gts and imgs",
 )
 parser.add_argument("-task_name", type=str, default="MedSAM-ViT-B")
