@@ -5,6 +5,7 @@ import numpy as np
 
 # import nibabel as nib
 import SimpleITK as sitk
+sitk.ProcessObject_SetGlobalWarningDisplay(False)
 import os
 
 join = os.path.join
@@ -13,21 +14,21 @@ from tqdm import tqdm
 import cc3d
 
 # convert nii image to npz files, including original image and corresponding masks
-modality = "CT"
-anatomy = "Abd"  # anantomy + dataset name
+modality = "MR"# "CT"
+anatomy = "ACDCts"# "Abd"  # anantomy + dataset name
 img_name_suffix = "_0000.nii.gz"
 gt_name_suffix = ".nii.gz"
-prefix = modality + "_" + anatomy + "_"
+prefix = modality + "_" + anatomy + "_" # MR_ACDCts_ 
 
-nii_path = "data/FLARE22Train/images"  # path to the nii images
-gt_path = "data/FLARE22Train/labels"  # path to the ground truth
-npy_path = "data/npy/" + prefix[:-1]
+nii_path = "data/ACDC/test/images"# "data/FLARE22Train/images"  # path to the nii images
+gt_path = "data/ACDC/test/labels"# "data/FLARE22Train/labels"  # path to the ground truth
+npy_path = "data/npy/" + prefix[:-1] # # data/npy/MR_ACDCts
 os.makedirs(join(npy_path, "gts"), exist_ok=True)
 os.makedirs(join(npy_path, "imgs"), exist_ok=True)
 
 image_size = 1024
-voxel_num_thre2d = 100
-voxel_num_thre3d = 1000
+voxel_num_thre2d = 10# 100
+voxel_num_thre3d = 100# 1000
 
 names = sorted(os.listdir(gt_path))
 print(f"ori \# files {len(names)=}")
@@ -39,9 +40,9 @@ names = [
 print(f"after sanity check \# files {len(names)=}")
 
 # set label ids that are excluded
-remove_label_ids = [
-    12
-]  # remove deodenum since it is scattered in the image, which is hard to specify with the bounding box
+# remove_label_ids = [
+#     12
+# ]  # remove deodenum since it is scattered in the image, which is hard to specify with the bounding box
 tumor_id = None  # only set this when there are multiple tumors; convert semantic masks to instance masks
 # set window level and width
 # https://radiopaedia.org/articles/windowing-ct
@@ -49,14 +50,18 @@ WINDOW_LEVEL = 40  # only for CT images
 WINDOW_WIDTH = 400  # only for CT images
 
 # %% save preprocessed images and masks as npz files
-for name in tqdm(names[:40]):  # use the remaining 10 cases for validation
+# for name in tqdm(names[:40]):  # use the remaining 10 cases for validation
+for name in tqdm(names):
     image_name = name.split(gt_name_suffix)[0] + img_name_suffix
     gt_name = name
+
     gt_sitk = sitk.ReadImage(join(gt_path, gt_name))
     gt_data_ori = np.uint8(sitk.GetArrayFromImage(gt_sitk))
+
     # remove label ids
-    for remove_label_id in remove_label_ids:
-        gt_data_ori[gt_data_ori == remove_label_id] = 0
+    # for remove_label_id in remove_label_ids:
+    #     gt_data_ori[gt_data_ori == remove_label_id] = 0
+
     # label tumor masks as instances and remove from gt_data_ori
     if tumor_id is not None:
         tumor_bw = np.uint8(gt_data_ori == tumor_id)
@@ -70,12 +75,12 @@ for name in tqdm(names[:40]):  # use the remaining 10 cases for validation
             tumor_inst[tumor_inst > 0] + np.max(gt_data_ori) + 1
         )
 
+    # 
     # exclude the objects with less than 1000 pixels in 3D
     gt_data_ori = cc3d.dust(
         gt_data_ori, threshold=voxel_num_thre3d, connectivity=26, in_place=True
     )
     # remove small objects with less than 100 pixels in 2D slices
-
     for slice_i in range(gt_data_ori.shape[0]):
         gt_i = gt_data_ori[slice_i, :, :]
         # remove small objects with less than 100 pixels
@@ -83,6 +88,7 @@ for name in tqdm(names[:40]):  # use the remaining 10 cases for validation
         gt_data_ori[slice_i, :, :] = cc3d.dust(
             gt_i, threshold=voxel_num_thre2d, connectivity=8, in_place=True
         )
+
     # find non-zero slices
     z_index, _, _ = np.where(gt_data_ori > 0)
     z_index = np.unique(z_index)
@@ -90,6 +96,7 @@ for name in tqdm(names[:40]):  # use the remaining 10 cases for validation
     if len(z_index) > 0:
         # crop the ground truth with non-zero slices
         gt_roi = gt_data_ori[z_index, :, :]
+
         # load image and preprocess
         img_sitk = sitk.ReadImage(join(nii_path, image_name))
         image_data = sitk.GetArrayFromImage(img_sitk)
@@ -115,9 +122,11 @@ for name in tqdm(names[:40]):  # use the remaining 10 cases for validation
             )
             image_data_pre[image_data == 0] = 0
 
-        image_data_pre = np.uint8(image_data_pre)
+        image_data_pre = np.uint8(image_data_pre) # 转换为无符号8位整型，所有像素值转换到0~255
         img_roi = image_data_pre[z_index, :, :]
+
         np.savez_compressed(join(npy_path, prefix + gt_name.split(gt_name_suffix)[0]+'.npz'), imgs=img_roi, gts=gt_roi, spacing=img_sitk.GetSpacing())
+
         # save the image and ground truth as nii files for sanity check;
         # they can be removed
         img_roi_sitk = sitk.GetImageFromArray(img_roi)
@@ -130,6 +139,7 @@ for name in tqdm(names[:40]):  # use the remaining 10 cases for validation
             gt_roi_sitk,
             join(npy_path, prefix + gt_name.split(gt_name_suffix)[0] + "_gt.nii.gz"),
         )
+
         # save the each CT image as npy file
         for i in range(img_roi.shape[0]):
             img_i = img_roi[i, :, :]
